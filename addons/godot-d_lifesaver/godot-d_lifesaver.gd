@@ -6,7 +6,9 @@ var _btn: Button
 var _current_toast: PanelContainer
 var _last_save_unix: int = 0
 var _update_timer: float = 0.0
+var _count_timer: float = 0.0
 var _is_dirty: bool = false
+var _commit_count: int = 0
 
 
 # ------------- [Callbacks] -------------
@@ -22,10 +24,18 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	_update_timer += delta
-	# Check git status and update text every 2 seconds to avoid excessive overhead
+	_count_timer += delta
+
+	# Check git status and update text every 2 seconds
 	if _update_timer >= 2.0:
 		_update_timer = 0.0
 		_is_dirty = _check_is_dirty()
+		_update_button_text()
+	
+	# Update commit count every 60 seconds
+	if _count_timer >= 60.0:
+		_count_timer = 0.0
+		_commit_count = _get_auto_save_commit_count()
 		_update_button_text()
 
 
@@ -40,6 +50,7 @@ func _prepare_toolbar() -> void:
 
 	_last_save_unix = _get_last_commit_unix_time()
 	_is_dirty = _check_is_dirty()
+	_commit_count = _get_auto_save_commit_count()
 	_update_button_text()
 
 
@@ -51,12 +62,20 @@ func _get_last_commit_unix_time() -> int:
 	return 0
 
 
+func _get_auto_save_commit_count() -> int:
+	var output: Array = []
+	# Count commits starting with our prefix
+	var exit_code := OS.execute("git", ["rev-list", "--count", "--grep=^d_lifesaver:", "HEAD"], output)
+	if exit_code == 0 and not output.is_empty():
+		return int(output[0])
+	return 0
+
+
 func _check_is_dirty() -> bool:
 	var output: Array = []
 	# Check for any changes (staged or unstaged)
 	var exit_code := OS.execute("git", ["status", "--porcelain"], output)
 	if exit_code == 0 and not output.is_empty():
-		# Porcelain output is empty if there are no changes
 		return not output[0].strip_edges().is_empty()
 	return false
 
@@ -66,9 +85,10 @@ func _update_button_text() -> void:
 		return
 
 	var base_text := "Life Saver"
+	var count_text := " x{n}".format({"n": _commit_count}) if _commit_count > 0 else ""
 
 	if not _is_dirty:
-		_btn.text = "{base} (Safe)".format({"base": base_text})
+		_btn.text = "{base} (Safe{count})".format({"base": base_text, "count": count_text})
 		_btn.add_theme_color_override("font_color", Color.MEDIUM_SEA_GREEN)
 		_btn.add_theme_color_override("font_hover_color", Color.MEDIUM_SEA_GREEN.lightened(0.2))
 		_btn.add_theme_color_override("font_pressed_color", Color.MEDIUM_SEA_GREEN.darkened(0.2))
@@ -76,16 +96,20 @@ func _update_button_text() -> void:
 		return
 
 	if _last_save_unix <= 0:
-		_btn.text = base_text
+		_btn.text = base_text + count_text
 		_btn.remove_theme_color_override("font_color")
 		return
 
 	var now := int(Time.get_unix_time_from_system())
 	var elapsed := now - _last_save_unix
-
+	
 	# Update text
-	_btn.text = "{base} ({time})".format({"base": base_text, "time": _format_elapsed_time(elapsed)})
-
+	_btn.text = "{base} ({time}{count})".format({
+		"base": base_text, 
+		"time": _format_elapsed_time(elapsed),
+		"count": count_text
+	})
+	
 	# Update color: turn red if > 10 minutes (600 seconds)
 	if elapsed >= 600:
 		_btn.add_theme_color_override("font_color", Color.INDIAN_RED)
@@ -147,6 +171,7 @@ func _git_save() -> void:
 		_show_toast("Life saved!\n" + commit_msg)
 		_last_save_unix = int(Time.get_unix_time_from_system())
 		_is_dirty = false
+		_commit_count = _get_auto_save_commit_count()
 		_update_button_text()
 	else:
 		var err_msg := "git commit failed (code {code})".format({"code": exit_code})
