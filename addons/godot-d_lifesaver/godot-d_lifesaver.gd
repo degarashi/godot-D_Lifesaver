@@ -4,6 +4,7 @@ extends EditorPlugin
 # ------------- [Constants] -------------
 const SETTING_DIRTY_CHECK_INTERVAL = "d_lifesaver/intervals/dirty_check_seconds"
 const SETTING_COMMIT_COUNT_INTERVAL = "d_lifesaver/intervals/commit_count_seconds"
+const SETTING_SHORTCUT = "d_lifesaver/shortcut/trigger"
 
 # ------------- [Private Variable] -------------
 var _btn: Button
@@ -26,6 +27,21 @@ func _exit_tree() -> void:
 	if _btn:
 		remove_control_from_container(CONTAINER_TOOLBAR, _btn)
 		_btn.queue_free()
+
+
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.is_pressed() or event.is_echo():
+		return
+
+	var es := get_editor_interface().get_editor_settings()
+	var shortcut_text: String = es.get_setting(SETTING_SHORTCUT)
+	if shortcut_text.is_empty():
+		return
+
+	# Simple shortcut matching
+	if event.as_text() == shortcut_text:
+		_on_btn_pressed()
+		get_viewport().set_input_as_handled()
 
 
 func _process(delta: float) -> void:
@@ -73,6 +89,16 @@ func _prepare_preferences() -> void:
 			"type": TYPE_FLOAT,
 			"hint": PROPERTY_HINT_RANGE,
 			"hint_string": "5,600,1"
+		}
+	)
+
+	if not es.has_setting(SETTING_SHORTCUT):
+		# Default shortcut
+		es.set_setting(SETTING_SHORTCUT, "Ctrl+Alt+S")
+	es.add_property_info(
+		{
+			"name": SETTING_SHORTCUT,
+			"type": TYPE_STRING,
 		}
 	)
 
@@ -132,7 +158,13 @@ func _update_button_text() -> void:
 	var base_text := "Life Saver"
 	var count_text := " x{n}".format({"n": _commit_count}) if _commit_count > 0 else ""
 	
-	_btn.tooltip_text = "Branch: {branch}\nStage all changes and create a temporary commit".format({"branch": _current_branch})
+	var es := get_editor_interface().get_editor_settings()
+	var shortcut: String = es.get_setting(SETTING_SHORTCUT)
+
+	_btn.tooltip_text = (
+		"Branch: {branch}\nShortcut: {shortcut}\nStage all changes and create a temporary commit"
+		. format({"branch": _current_branch, "shortcut": shortcut})
+	)
 
 	if not _is_dirty:
 		_btn.text = "{base} (Safe{count})".format({"base": base_text, "count": count_text})
