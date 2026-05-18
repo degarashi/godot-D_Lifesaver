@@ -1,0 +1,13 @@
+naming-conventions:
+  class: PascalCase
+  function: snake_case
+  variable: snake_case
+  constant: UPPER_CASE
+class-definitions-order:
+  - const
+  - signal
+  - var
+  - func
+line-length: 80
+indent-size: 4
+indent-type: tab
