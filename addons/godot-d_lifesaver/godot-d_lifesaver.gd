@@ -76,10 +76,8 @@ func _update_button_text() -> void:
 
 
 func _format_elapsed_time(seconds: int) -> String:
-	if seconds < 0:
-		return "now"
 	if seconds < 60:
-		return "{s}s".format({"s": seconds})
+		return "< 1m"
 	if seconds < 3600:
 		return "{m}m".format({"m": seconds / 60})
 	if seconds < 86400:
