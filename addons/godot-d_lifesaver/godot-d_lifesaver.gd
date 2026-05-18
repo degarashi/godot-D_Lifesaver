@@ -1,6 +1,10 @@
 @tool
 extends EditorPlugin
 
+# ------------- [Constants] -------------
+const SETTING_DIRTY_CHECK_INTERVAL = "d_lifesaver/intervals/dirty_check_seconds"
+const SETTING_COMMIT_COUNT_INTERVAL = "d_lifesaver/intervals/commit_count_seconds"
+
 # ------------- [Private Variable] -------------
 var _btn: Button
 var _current_toast: PanelContainer
@@ -13,6 +17,7 @@ var _commit_count: int = 0
 
 # ------------- [Callbacks] -------------
 func _enter_tree() -> void:
+	_prepare_preferences()
 	_prepare_toolbar()
 
 
@@ -26,20 +31,50 @@ func _process(delta: float) -> void:
 	_update_timer += delta
 	_count_timer += delta
 
-	# Check git status and update text every 2 seconds
-	if _update_timer >= 2.0:
+	var es := get_editor_interface().get_editor_settings()
+	var dirty_interval: float = es.get_setting(SETTING_DIRTY_CHECK_INTERVAL)
+	var count_interval: float = es.get_setting(SETTING_COMMIT_COUNT_INTERVAL)
+
+	# Check git status and update text
+	if _update_timer >= dirty_interval:
 		_update_timer = 0.0
 		_is_dirty = _check_is_dirty()
 		_update_button_text()
-	
-	# Update commit count every 60 seconds
-	if _count_timer >= 60.0:
+
+	# Update commit count
+	if _count_timer >= count_interval:
 		_count_timer = 0.0
 		_commit_count = _get_auto_save_commit_count()
 		_update_button_text()
 
 
 # ------------- [Private Method] -------------
+func _prepare_preferences() -> void:
+	var es := get_editor_interface().get_editor_settings()
+
+	if not es.has_setting(SETTING_DIRTY_CHECK_INTERVAL):
+		es.set_setting(SETTING_DIRTY_CHECK_INTERVAL, 2.0)
+	es.add_property_info(
+		{
+			"name": SETTING_DIRTY_CHECK_INTERVAL,
+			"type": TYPE_FLOAT,
+			"hint": PROPERTY_HINT_RANGE,
+			"hint_string": "0.5,60,0.5"
+		}
+	)
+
+	if not es.has_setting(SETTING_COMMIT_COUNT_INTERVAL):
+		es.set_setting(SETTING_COMMIT_COUNT_INTERVAL, 60.0)
+	es.add_property_info(
+		{
+			"name": SETTING_COMMIT_COUNT_INTERVAL,
+			"type": TYPE_FLOAT,
+			"hint": PROPERTY_HINT_RANGE,
+			"hint_string": "5,600,1"
+		}
+	)
+
+
 func _prepare_toolbar() -> void:
 	_btn = Button.new()
 	_btn.tooltip_text = "Stage all changes and create a temporary commit"
@@ -102,14 +137,15 @@ func _update_button_text() -> void:
 
 	var now := int(Time.get_unix_time_from_system())
 	var elapsed := now - _last_save_unix
-	
+
 	# Update text
-	_btn.text = "{base} ({time}{count})".format({
-		"base": base_text, 
-		"time": _format_elapsed_time(elapsed),
-		"count": count_text
-	})
-	
+	_btn.text = (
+		"{base} ({time}{count})"
+		. format(
+			{"base": base_text, "time": _format_elapsed_time(elapsed), "count": count_text}
+		)
+	)
+
 	# Update color: turn red if > 10 minutes (600 seconds)
 	if elapsed >= 600:
 		_btn.add_theme_color_override("font_color", Color.INDIAN_RED)
