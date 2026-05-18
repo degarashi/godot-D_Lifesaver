@@ -13,6 +13,22 @@ config_version=5
 config/name="godot-D_Lifesaver"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 
+[autoload]
+
+DLogger="*uid://dk8w65jl35vbd"
+
+[debug]
+
+d_logger/enable_console_log=false
+d_logger/min_log_level=0
+d_logger/enable_file_log=false
+d_logger/log_file_path="user://debug.log"
+d_logger/pause_on_error=true
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/d_logger/plugin.cfg")
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

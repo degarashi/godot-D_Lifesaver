@@ -1,0 +1,3 @@
+[submodule "asub/d_logger"]
+	path = asub/d_logger
+	url = ../godot-D_Logger
