@@ -13,6 +13,7 @@ var _update_timer: float = 0.0
 var _count_timer: float = 0.0
 var _is_dirty: bool = false
 var _commit_count: int = 0
+var _current_branch: String = "unknown"
 
 
 # ------------- [Callbacks] -------------
@@ -39,6 +40,7 @@ func _process(delta: float) -> void:
 	if _update_timer >= dirty_interval:
 		_update_timer = 0.0
 		_is_dirty = _check_is_dirty()
+		_current_branch = _get_current_branch()
 		_update_button_text()
 
 	# Update commit count
@@ -77,7 +79,6 @@ func _prepare_preferences() -> void:
 
 func _prepare_toolbar() -> void:
 	_btn = Button.new()
-	_btn.tooltip_text = "Stage all changes and create a temporary commit"
 	_btn.icon = get_editor_interface().get_base_control().get_theme_icon(&"Save", &"EditorIcons")
 	_btn.pressed.connect(_on_btn_pressed)
 
@@ -85,6 +86,7 @@ func _prepare_toolbar() -> void:
 
 	_last_save_unix = _get_last_commit_unix_time()
 	_is_dirty = _check_is_dirty()
+	_current_branch = _get_current_branch()
 	_commit_count = _get_auto_save_commit_count()
 	_update_button_text()
 
@@ -106,6 +108,14 @@ func _get_auto_save_commit_count() -> int:
 	return 0
 
 
+func _get_current_branch() -> String:
+	var output: Array = []
+	var exit_code := OS.execute("git", ["branch", "--show-current"], output)
+	if exit_code == 0 and not output.is_empty():
+		return output[0].strip_edges()
+	return "unknown"
+
+
 func _check_is_dirty() -> bool:
 	var output: Array = []
 	# Check for any changes (staged or unstaged)
@@ -121,6 +131,8 @@ func _update_button_text() -> void:
 
 	var base_text := "Life Saver"
 	var count_text := " x{n}".format({"n": _commit_count}) if _commit_count > 0 else ""
+	
+	_btn.tooltip_text = "Branch: {branch}\nStage all changes and create a temporary commit".format({"branch": _current_branch})
 
 	if not _is_dirty:
 		_btn.text = "{base} (Safe{count})".format({"base": base_text, "count": count_text})
