@@ -165,5 +165,5 @@ func _show_toast(text: String, is_error: bool = false) -> void:
 	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(panel.queue_free)
 	tween.finished.connect(
-		func(): if is_instance_valid(panel) and _current_toast == panel: _current_toast = null
+		func() -> void: if is_instance_valid(panel) and _current_toast == panel: _current_toast = null
 	)
