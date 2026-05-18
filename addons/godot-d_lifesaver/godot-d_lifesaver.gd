@@ -58,7 +58,21 @@ func _update_button_text() -> void:
 
 	var now := int(Time.get_unix_time_from_system())
 	var elapsed := now - _last_save_unix
+	
+	# Update text
 	_btn.text = "{base} ({time})".format({"base": base_text, "time": _format_elapsed_time(elapsed)})
+	
+	# Update color: turn red if > 10 minutes (600 seconds)
+	if elapsed >= 600:
+		_btn.add_theme_color_override("font_color", Color.INDIAN_RED)
+		_btn.add_theme_color_override("font_hover_color", Color.INDIAN_RED.lightened(0.2))
+		_btn.add_theme_color_override("font_pressed_color", Color.INDIAN_RED.darkened(0.2))
+		_btn.add_theme_color_override("font_focus_color", Color.INDIAN_RED)
+	else:
+		_btn.remove_theme_color_override("font_color")
+		_btn.remove_theme_color_override("font_hover_color")
+		_btn.remove_theme_color_override("font_pressed_color")
+		_btn.remove_theme_color_override("font_focus_color")
 
 
 func _format_elapsed_time(seconds: int) -> String:
