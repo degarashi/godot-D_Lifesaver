@@ -4,11 +4,13 @@ extends EditorPlugin
 # ------------- [Private Variable] -------------
 var _btn: Button
 var _current_toast: PanelContainer
+var _last_save_unix: int = 0
+var _update_timer: float = 0.0
 
 
 # ------------- [Callbacks] -------------
 func _enter_tree() -> void:
-	_prepare_button()
+	_prepare_toolbar()
 
 
 func _exit_tree() -> void:
@@ -17,19 +19,58 @@ func _exit_tree() -> void:
 		_btn.queue_free()
 
 
+func _process(delta: float) -> void:
+	_update_timer += delta
+	if _update_timer >= 1.0:
+		_update_timer = 0.0
+		_update_button_text()
+
+
 # ------------- [Private Method] -------------
-func _prepare_button() -> void:
+func _prepare_toolbar() -> void:
 	_btn = Button.new()
-	_btn.text = "Life Saver"
 	_btn.tooltip_text = "Stage all changes and create a temporary commit"
-
-	# Get a built-in icon if possible. "Save" is a good fallback.
-	# Wait, we need to wait until the editor is ready to get theme icons reliably.
-	# But in _enter_tree of a plugin, it's usually fine or we can use a callback.
 	_btn.icon = get_editor_interface().get_base_control().get_theme_icon(&"Save", &"EditorIcons")
-
 	_btn.pressed.connect(_on_btn_pressed)
+
 	add_control_to_container(CONTAINER_TOOLBAR, _btn)
+
+	_last_save_unix = _get_last_commit_unix_time()
+	_update_button_text()
+
+
+func _get_last_commit_unix_time() -> int:
+	var output: Array = []
+	var exit_code := OS.execute("git", ["log", "-1", "--format=%ct"], output)
+	if exit_code == 0 and not output.is_empty():
+		return int(output[0])
+	return 0
+
+
+func _update_button_text() -> void:
+	if not is_instance_valid(_btn):
+		return
+
+	var base_text := "Life Saver"
+	if _last_save_unix <= 0:
+		_btn.text = base_text
+		return
+
+	var now := int(Time.get_unix_time_from_system())
+	var elapsed := now - _last_save_unix
+	_btn.text = "{base} ({time})".format({"base": base_text, "time": _format_elapsed_time(elapsed)})
+
+
+func _format_elapsed_time(seconds: int) -> String:
+	if seconds < 0:
+		return "now"
+	if seconds < 60:
+		return "{s}s".format({"s": seconds})
+	if seconds < 3600:
+		return "{m}m".format({"m": seconds / 60})
+	if seconds < 86400:
+		return "{h}h".format({"h": seconds / 3600})
+	return "{d}d".format({"d": seconds / 86400})
 
 
 func _on_btn_pressed() -> void:
@@ -66,12 +107,12 @@ func _git_save() -> void:
 	if exit_code == 0:
 		DLogger.info("Life saved! " + commit_msg)
 		_show_toast("Life saved!\n" + commit_msg)
+		_last_save_unix = int(Time.get_unix_time_from_system())
+		_update_button_text()
 	else:
 		var err_msg := "git commit failed (code {code})".format({"code": exit_code})
 		DLogger.error(err_msg)
 		_show_toast(err_msg, true)
-
-
 
 
 func _show_toast(text: String, is_error: bool = false) -> void:
@@ -123,4 +164,6 @@ func _show_toast(text: String, is_error: bool = false) -> void:
 	tween.tween_interval(2.0)
 	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(panel.queue_free)
-	tween.finished.connect(func(): if is_instance_valid(panel) and _current_toast == panel: _current_toast = null)
+	tween.finished.connect(
+		func(): if is_instance_valid(panel) and _current_toast == panel: _current_toast = null
+	)
