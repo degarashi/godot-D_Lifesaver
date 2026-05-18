@@ -27,7 +27,7 @@ d_logger/pause_on_error=true
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/d_logger/plugin.cfg")
+enabled=PackedStringArray("res://addons/d_logger/plugin.cfg", "res://addons/godot-d_lifesaver/plugin.cfg")
 
 [physics]
 
