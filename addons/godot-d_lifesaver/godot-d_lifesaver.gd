@@ -12,9 +12,11 @@ var _current_toast: PanelContainer
 var _last_save_unix: int = 0
 var _update_timer: float = 0.0
 var _count_timer: float = 0.0
+var _git_check_timer: float = 0.0
 var _is_dirty: bool = false
 var _commit_count: int = 0
 var _current_branch: String = "unknown"
+var _is_git_repo: bool = false
 
 
 # ------------- [Callbacks] -------------
@@ -30,6 +32,9 @@ func _exit_tree() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if not _is_git_repo:
+		return
+
 	if not event is InputEventKey or not event.is_pressed() or event.is_echo():
 		return
 
@@ -45,6 +50,19 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	# If not a git repo, check less frequently if it has been initialized
+	if not _is_git_repo:
+		_git_check_timer += delta
+		if _git_check_timer >= 5.0:
+			_git_check_timer = 0.0
+			_is_git_repo = _check_is_git_repo()
+			if _is_git_repo:
+				DLogger.info("Git repository detected. Life Saver is now active.")
+				_show_toast("Git repository detected!\nLife Saver is now active.")
+				_on_git_initialized()
+			_update_button_text()
+		return
+
 	_update_timer += delta
 	_count_timer += delta
 
@@ -110,11 +128,25 @@ func _prepare_toolbar() -> void:
 
 	add_control_to_container(CONTAINER_TOOLBAR, _btn)
 
+	_is_git_repo = _check_is_git_repo()
+	if _is_git_repo:
+		_on_git_initialized()
+	else:
+		_update_button_text()
+
+
+func _on_git_initialized() -> void:
 	_last_save_unix = _get_last_commit_unix_time()
 	_is_dirty = _check_is_dirty()
 	_current_branch = _get_current_branch()
 	_commit_count = _get_auto_save_commit_count()
 	_update_button_text()
+
+
+func _check_is_git_repo() -> bool:
+	var output: Array = []
+	var exit_code := OS.execute("git", ["rev-parse", "--is-inside-work-tree"], output)
+	return exit_code == 0
 
 
 func _get_last_commit_unix_time() -> int:
@@ -128,7 +160,9 @@ func _get_last_commit_unix_time() -> int:
 func _get_auto_save_commit_count() -> int:
 	var output: Array = []
 	# Count commits starting with our prefix
-	var exit_code := OS.execute("git", ["rev-list", "--count", "--grep=^d_lifesaver:", "HEAD"], output)
+	var exit_code := OS.execute(
+		"git", ["rev-list", "--count", "--grep=^d_lifesaver:", "HEAD"], output
+	)
 	if exit_code == 0 and not output.is_empty():
 		return int(output[0])
 	return 0
@@ -156,8 +190,18 @@ func _update_button_text() -> void:
 		return
 
 	var base_text := "Life Saver"
+
+	if not _is_git_repo:
+		_btn.text = "{base} (No Git)".format({"base": base_text})
+		_btn.disabled = true
+		_btn.tooltip_text = "Git is not initialized in this project.\nPlease run 'git init' to use Life Saver."
+		# Use default color for disabled state
+		_btn.remove_theme_color_override("font_color")
+		return
+
+	_btn.disabled = false
 	var count_text := " x{n}".format({"n": _commit_count}) if _commit_count > 0 else ""
-	
+
 	var es := get_editor_interface().get_editor_settings()
 	var shortcut: String = es.get_setting(SETTING_SHORTCUT)
 
@@ -177,6 +221,9 @@ func _update_button_text() -> void:
 	if _last_save_unix <= 0:
 		_btn.text = base_text + count_text
 		_btn.remove_theme_color_override("font_color")
+		_btn.remove_theme_color_override("font_hover_color")
+		_btn.remove_theme_color_override("font_pressed_color")
+		_btn.remove_theme_color_override("font_focus_color")
 		return
 
 	var now := int(Time.get_unix_time_from_system())
@@ -214,6 +261,10 @@ func _format_elapsed_time(seconds: int) -> String:
 
 
 func _on_btn_pressed() -> void:
+	if not _is_git_repo:
+		_show_toast("Git is not initialized!", true)
+		return
+
 	DLogger.info("Saving your life...")
 	_show_toast("Saving your life...")
 	_git_save()
