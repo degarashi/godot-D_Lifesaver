@@ -6,6 +6,7 @@ var _btn: Button
 var _current_toast: PanelContainer
 var _last_save_unix: int = 0
 var _update_timer: float = 0.0
+var _is_dirty: bool = false
 
 
 # ------------- [Callbacks] -------------
@@ -21,8 +22,10 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	_update_timer += delta
-	if _update_timer >= 1.0:
+	# Check git status and update text every 2 seconds to avoid excessive overhead
+	if _update_timer >= 2.0:
 		_update_timer = 0.0
+		_is_dirty = _check_is_dirty()
 		_update_button_text()
 
 
@@ -36,6 +39,7 @@ func _prepare_toolbar() -> void:
 	add_control_to_container(CONTAINER_TOOLBAR, _btn)
 
 	_last_save_unix = _get_last_commit_unix_time()
+	_is_dirty = _check_is_dirty()
 	_update_button_text()
 
 
@@ -47,21 +51,41 @@ func _get_last_commit_unix_time() -> int:
 	return 0
 
 
+func _check_is_dirty() -> bool:
+	var output: Array = []
+	# Check for any changes (staged or unstaged)
+	var exit_code := OS.execute("git", ["status", "--porcelain"], output)
+	if exit_code == 0 and not output.is_empty():
+		# Porcelain output is empty if there are no changes
+		return not output[0].strip_edges().is_empty()
+	return false
+
+
 func _update_button_text() -> void:
 	if not is_instance_valid(_btn):
 		return
 
 	var base_text := "Life Saver"
+
+	if not _is_dirty:
+		_btn.text = "{base} (Safe)".format({"base": base_text})
+		_btn.add_theme_color_override("font_color", Color.MEDIUM_SEA_GREEN)
+		_btn.add_theme_color_override("font_hover_color", Color.MEDIUM_SEA_GREEN.lightened(0.2))
+		_btn.add_theme_color_override("font_pressed_color", Color.MEDIUM_SEA_GREEN.darkened(0.2))
+		_btn.add_theme_color_override("font_focus_color", Color.MEDIUM_SEA_GREEN)
+		return
+
 	if _last_save_unix <= 0:
 		_btn.text = base_text
+		_btn.remove_theme_color_override("font_color")
 		return
 
 	var now := int(Time.get_unix_time_from_system())
 	var elapsed := now - _last_save_unix
-	
+
 	# Update text
 	_btn.text = "{base} ({time})".format({"base": base_text, "time": _format_elapsed_time(elapsed)})
-	
+
 	# Update color: turn red if > 10 minutes (600 seconds)
 	if elapsed >= 600:
 		_btn.add_theme_color_override("font_color", Color.INDIAN_RED)
@@ -94,7 +118,7 @@ func _on_btn_pressed() -> void:
 func _git_save() -> void:
 	var output: Array = []
 
-	# Stage all changes
+	# 1. Stage all changes
 	var exit_code := OS.execute("git", ["add", "-A"], output)
 	if exit_code != 0:
 		var err_msg := "git add failed (code {code})".format({"code": exit_code})
@@ -102,15 +126,17 @@ func _git_save() -> void:
 		_show_toast(err_msg, true)
 		return
 
-	# Check for changes
+	# 2. Check for changes
 	output.clear()
 	exit_code = OS.execute("git", ["diff", "--cached", "--quiet"], output)
 	if exit_code == 0:
 		DLogger.info("Nothing to save.")
 		_show_toast("Nothing to save.")
+		_is_dirty = false
+		_update_button_text()
 		return
 
-	# Commit
+	# 3. Commit
 	var time := Time.get_datetime_string_from_system().replace("T", " ")
 	var commit_msg := "d_lifesaver: auto-save " + time
 	output.clear()
@@ -120,6 +146,7 @@ func _git_save() -> void:
 		DLogger.info("Life saved! " + commit_msg)
 		_show_toast("Life saved!\n" + commit_msg)
 		_last_save_unix = int(Time.get_unix_time_from_system())
+		_is_dirty = false
 		_update_button_text()
 	else:
 		var err_msg := "git commit failed (code {code})".format({"code": exit_code})
@@ -177,5 +204,5 @@ func _show_toast(text: String, is_error: bool = false) -> void:
 	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(panel.queue_free)
 	tween.finished.connect(
-		func() -> void: if is_instance_valid(panel) and _current_toast == panel: _current_toast = null
+		func(): if is_instance_valid(panel) and _current_toast == panel: _current_toast = null
 	)
