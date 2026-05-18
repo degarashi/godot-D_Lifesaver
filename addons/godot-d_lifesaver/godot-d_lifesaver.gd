@@ -35,42 +35,43 @@ func _prepare_button() -> void:
 func _on_btn_pressed() -> void:
 	DLogger.info("Saving your life...")
 	_show_toast("Saving your life...")
+	_git_save()
 
+
+func _git_save() -> void:
 	var output: Array = []
 
-	# git add -A
+	# Stage all changes
 	var exit_code := OS.execute("git", ["add", "-A"], output)
 	if exit_code != 0:
-		var err_msg := "git add -A failed (code {0})".format([exit_code])
+		var err_msg := "git add failed (code {code})".format({"code": exit_code})
 		DLogger.error(err_msg)
 		_show_toast(err_msg, true)
-		for line in output:
-			DLogger.error(line)
 		return
 
-	# Check if there are staged changes to commit
+	# Check for changes
 	output.clear()
 	exit_code = OS.execute("git", ["diff", "--cached", "--quiet"], output)
 	if exit_code == 0:
-		DLogger.info("Nothing to save. Your life is already safe.")
-		_show_toast("Nothing to save. Your life is already safe.")
+		DLogger.info("Nothing to save.")
+		_show_toast("Nothing to save.")
 		return
 
-	# git commit -m "..."
+	# Commit
 	var time := Time.get_datetime_string_from_system().replace("T", " ")
 	var commit_msg := "d_lifesaver: auto-save " + time
 	output.clear()
 	exit_code = OS.execute("git", ["commit", "-m", commit_msg], output)
 
 	if exit_code == 0:
-		DLogger.info("Life saved! Commit: " + commit_msg)
-		_show_toast("Life saved! \n" + commit_msg)
+		DLogger.info("Life saved! " + commit_msg)
+		_show_toast("Life saved!\n" + commit_msg)
 	else:
-		var err_msg := "git commit failed (code {0})".format(exit_code)
+		var err_msg := "git commit failed (code {code})".format({"code": exit_code})
 		DLogger.error(err_msg)
 		_show_toast(err_msg, true)
-		for line in output:
-			DLogger.error(line)
+
+
 
 
 func _show_toast(text: String, is_error: bool = false) -> void:
