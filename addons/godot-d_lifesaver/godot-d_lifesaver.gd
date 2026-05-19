@@ -5,6 +5,7 @@ extends EditorPlugin
 const SETTING_DIRTY_CHECK_INTERVAL = "d_lifesaver/intervals/dirty_check_seconds"
 const SETTING_COMMIT_COUNT_INTERVAL = "d_lifesaver/intervals/commit_count_seconds"
 const SETTING_SHORTCUT = "d_lifesaver/shortcut/trigger"
+const SETTING_AUTO_SAVE_ON_FOCUS_LOSS = "d_lifesaver/auto_save/on_focus_loss"
 
 # ------------- [Private Variable] -------------
 var _btn: Button
@@ -42,6 +43,18 @@ func _exit_tree() -> void:
 		_undo_btn.queue_free()
 	if _commit_dialog:
 		_commit_dialog.queue_free()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		var es := get_editor_interface().get_editor_settings()
+		if (
+			es.has_setting(SETTING_AUTO_SAVE_ON_FOCUS_LOSS)
+			and es.get_setting(SETTING_AUTO_SAVE_ON_FOCUS_LOSS)
+		):
+			if _is_git_repo and _is_dirty:
+				DLogger.info("Auto-saving on focus loss...")
+				_git_save()
 
 
 func _input(event: InputEvent) -> void:
@@ -124,7 +137,6 @@ func _prepare_preferences() -> void:
 	)
 
 	if not es.has_setting(SETTING_SHORTCUT):
-		# Default shortcut
 		es.set_setting(SETTING_SHORTCUT, "Ctrl+Alt+S")
 	(
 		es
@@ -132,6 +144,18 @@ func _prepare_preferences() -> void:
 			{
 				"name": SETTING_SHORTCUT,
 				"type": TYPE_STRING,
+			}
+		)
+	)
+
+	if not es.has_setting(SETTING_AUTO_SAVE_ON_FOCUS_LOSS):
+		es.set_setting(SETTING_AUTO_SAVE_ON_FOCUS_LOSS, false)
+	(
+		es
+		. add_property_info(
+			{
+				"name": SETTING_AUTO_SAVE_ON_FOCUS_LOSS,
+				"type": TYPE_BOOL,
 			}
 		)
 	)
