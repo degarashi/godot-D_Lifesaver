@@ -122,11 +122,14 @@ func _prepare_preferences() -> void:
 	if not es.has_setting(SETTING_SHORTCUT):
 		# Default shortcut
 		es.set_setting(SETTING_SHORTCUT, "Ctrl+Alt+S")
-	es.add_property_info(
-		{
-			"name": SETTING_SHORTCUT,
-			"type": TYPE_STRING,
-		}
+	(
+		es
+		. add_property_info(
+			{
+				"name": SETTING_SHORTCUT,
+				"type": TYPE_STRING,
+			}
+		)
 	)
 
 
@@ -134,27 +137,27 @@ func _prepare_commit_dialog() -> void:
 	_commit_dialog = ConfirmationDialog.new()
 	_commit_dialog.title = "Life Saver: Commit Message"
 	_commit_dialog.confirmed.connect(_on_commit_dialog_confirmed)
-	
+
 	var vbox := VBoxContainer.new()
 	_commit_dialog.add_child(vbox)
-	
+
 	var label := Label.new()
 	label.text = "Optional: Enter a memo for this save (prefix 'd_lifesaver:' will be added)"
 	vbox.add_child(label)
-	
+
 	_commit_line_edit = LineEdit.new()
 	_commit_line_edit.placeholder_text = "auto-save (default)"
 	_commit_line_edit.custom_minimum_size.x = 400
 	vbox.add_child(_commit_line_edit)
-	
+
 	_commit_dialog.register_text_enter(_commit_line_edit)
-	
+
 	get_editor_interface().get_base_control().add_child(_commit_dialog)
 
 
 func _on_commit_dialog_confirmed() -> void:
 	var msg: String = _commit_line_edit.text.strip_edges()
-	_commit_line_edit.text = "" # Clear for next time
+	_commit_line_edit.text = ""  # Clear for next time
 	_git_save(msg)
 
 
@@ -167,7 +170,9 @@ func _prepare_toolbar() -> void:
 	_btn.pressed.connect(_on_btn_pressed)
 
 	_squash_btn = Button.new()
-	_squash_btn.icon = get_editor_interface().get_base_control().get_theme_icon(&"AssetLib", &"EditorIcons")
+	_squash_btn.icon = get_editor_interface().get_base_control().get_theme_icon(
+		&"AssetLib", &"EditorIcons"
+	)
 	_squash_btn.tooltip_text = "Squash all temporary commits into one"
 	_squash_btn.pressed.connect(_on_squash_pressed)
 
@@ -242,7 +247,7 @@ func _update_button_text() -> void:
 		_btn.disabled = true
 		_btn.tooltip_text = "Git is not initialized in this project.\nPlease run 'git init' to use Life Saver."
 		_btn.remove_theme_color_override("font_color")
-		
+
 		_squash_btn.visible = false
 		return
 
@@ -282,12 +287,9 @@ func _update_button_text() -> void:
 	var elapsed := now - _last_save_unix
 
 	# Update text
-	_btn.text = (
-		"{base} ({time}{count})"
-		. format(
-			{"base": base_text, "time": _format_elapsed_time(elapsed), "count": count_text}
-		)
-	)
+	_btn.text = ("{base} ({time}{count})".format(
+		{"base": base_text, "time": _format_elapsed_time(elapsed), "count": count_text}
+	))
 
 	# Update color: turn red if > 10 minutes (600 seconds)
 	if elapsed >= 600:
@@ -368,7 +370,11 @@ func _on_btn_gui_input(event: InputEvent) -> void:
 	if not _is_git_repo:
 		return
 
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+	if (
+		event is InputEventMouseButton
+		and event.button_index == MOUSE_BUTTON_RIGHT
+		and event.pressed
+	):
 		_btn.accept_event()
 		_commit_line_edit.text = ""
 		_commit_dialog.popup_centered()
@@ -479,5 +485,7 @@ func _show_toast(text: String, is_error: bool = false) -> void:
 	tween.tween_property(panel, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(panel.queue_free)
 	tween.finished.connect(
-		func(): if is_instance_valid(panel) and _current_toast == panel: _current_toast = null
+		func() -> void:
+			if is_instance_valid(panel) and _current_toast == panel:
+				_current_toast = null,
 	)
