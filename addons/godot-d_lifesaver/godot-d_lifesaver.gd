@@ -357,6 +357,14 @@ func _on_commit_dialog_confirmed() -> void:
 	_trigger_git_save(msg)
 
 
+func _on_commit_line_edit_gui_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_ENTER and event.ctrl_pressed:
+			_commit_dialog.hide()
+			_on_commit_dialog_confirmed()
+			get_viewport().set_input_as_handled()
+
+
 func _on_undo_pressed() -> void:
 	var result := DLifesaverGit.undo()
 	if result.success:
