@@ -340,7 +340,7 @@ func _on_btn_pressed() -> void:
 func _git_save() -> void:
 	var output: Array = []
 
-	# 1. Stage all changes
+	# Stage all changes
 	var exit_code := OS.execute("git", ["add", "-A"], output)
 	if exit_code != 0:
 		var err_msg := "git add failed (code {code})".format({"code": exit_code})
@@ -348,7 +348,7 @@ func _git_save() -> void:
 		_show_toast(err_msg, true)
 		return
 
-	# 2. Check for changes
+	# Check for changes
 	output.clear()
 	exit_code = OS.execute("git", ["diff", "--cached", "--quiet"], output)
 	if exit_code == 0:
@@ -358,7 +358,7 @@ func _git_save() -> void:
 		_update_button_text()
 		return
 
-	# 3. Commit
+	# Commit
 	var time := Time.get_datetime_string_from_system().replace("T", " ")
 	var commit_msg := "d_lifesaver: auto-save " + time
 	output.clear()
