@@ -245,6 +245,7 @@ func _update_ui() -> void:
 	_btn.disabled = false
 	var count_text := " x%d" % _commit_count if _commit_count > 0 else ""
 	var has_temp_commits := _commit_count > 0
+	var branch_prefix := "[%s] " % _current_branch
 
 	# Update Squash & Undo visibility
 	_squash_btn.visible = has_temp_commits
@@ -265,7 +266,7 @@ func _update_ui() -> void:
 
 	# Handle status text and colors
 	if not _is_dirty:
-		_btn.text = "%s (Safe%s)" % [base_text, count_text]
+		_btn.text = "%s%s (Safe%s)" % [branch_prefix, base_text, count_text]
 		_btn.add_theme_color_override("font_color", Color.MEDIUM_SEA_GREEN)
 		_btn.self_modulate = Color.WHITE
 		return
@@ -273,12 +274,14 @@ func _update_ui() -> void:
 	_btn.self_modulate = Color(1.0, 0.75, 0.3)  # Subdued Amber
 
 	if _last_save_unix <= 0:
-		_btn.text = base_text + count_text
+		_btn.text = branch_prefix + base_text + count_text
 		_btn.remove_theme_color_override("font_color")
 		return
 
 	var elapsed := int(Time.get_unix_time_from_system()) - _last_save_unix
-	_btn.text = "%s (%s%s)" % [base_text, _format_elapsed_time(elapsed), count_text]
+	_btn.text = (
+		"%s%s (%s%s)" % [branch_prefix, base_text, _format_elapsed_time(elapsed), count_text]
+	)
 
 	# Turn red if more than 10 minutes have passed
 	if elapsed >= 600:
