@@ -227,6 +227,24 @@ func _get_current_branch() -> String:
 	return "unknown"
 
 
+func _get_recent_save_messages(count: int) -> PackedStringArray:
+	var output: Array = []
+	var exit_code := OS.execute(
+		"git", ["log", "-n", str(count), "--grep=^d_lifesaver:", "--format=%s"], output
+	)
+	if exit_code != 0 or output.is_empty():
+		return []
+
+	var lines: PackedStringArray = output[0].strip_edges().split("\n")
+	var result: PackedStringArray = []
+	for line in lines:
+		if line.is_empty():
+			continue
+		# Remove the prefix for cleaner display
+		result.append("- " + line.replace("d_lifesaver: ", ""))
+	return result
+
+
 func _check_is_dirty() -> bool:
 	var output: Array = []
 	# Check for any changes (staged or unstaged)
@@ -262,9 +280,14 @@ func _update_button_text() -> void:
 	var shortcut_val: Variant = es.get_setting(SETTING_SHORTCUT)
 	var shortcut_str: String = str(shortcut_val) if shortcut_val != null else "None"
 
+	var history := _get_recent_save_messages(3)
+	var history_text := ""
+	if not history.is_empty():
+		history_text = "\n\nRecent Saves:\n" + "\n".join(history)
+
 	_btn.tooltip_text = (
-		"L-Click: Quick Save\nR-Click: Memo & Save\nShortcut: %s\nBranch: %s"
-		% [shortcut_str, _current_branch]
+		"L-Click: Quick Save\nR-Click: Memo & Save\nShortcut: %s\nBranch: %s%s"
+		% [shortcut_str, _current_branch, history_text]
 	)
 
 	if not _is_dirty:
