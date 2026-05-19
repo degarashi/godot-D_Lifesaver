@@ -8,6 +8,7 @@ const SETTING_SHORTCUT = "d_lifesaver/shortcut/trigger"
 
 # ------------- [Private Variable] -------------
 var _btn: Button
+var _squash_btn: Button
 var _current_toast: PanelContainer
 var _last_save_unix: int = 0
 var _update_timer: float = 0.0
@@ -29,6 +30,9 @@ func _exit_tree() -> void:
 	if _btn:
 		remove_control_from_container(CONTAINER_TOOLBAR, _btn)
 		_btn.queue_free()
+	if _squash_btn:
+		remove_control_from_container(CONTAINER_TOOLBAR, _squash_btn)
+		_squash_btn.queue_free()
 
 
 func _input(event: InputEvent) -> void:
@@ -126,7 +130,13 @@ func _prepare_toolbar() -> void:
 	_btn.icon = get_editor_interface().get_base_control().get_theme_icon(&"Save", &"EditorIcons")
 	_btn.pressed.connect(_on_btn_pressed)
 
+	_squash_btn = Button.new()
+	_squash_btn.icon = get_editor_interface().get_base_control().get_theme_icon(&"AssetLib", &"EditorIcons")
+	_squash_btn.tooltip_text = "Squash all temporary commits into one"
+	_squash_btn.pressed.connect(_on_squash_pressed)
+
 	add_control_to_container(CONTAINER_TOOLBAR, _btn)
+	add_control_to_container(CONTAINER_TOOLBAR, _squash_btn)
 
 	_is_git_repo = _check_is_git_repo()
 	if _is_git_repo:
@@ -186,7 +196,7 @@ func _check_is_dirty() -> bool:
 
 
 func _update_button_text() -> void:
-	if not is_instance_valid(_btn):
+	if not is_instance_valid(_btn) or not is_instance_valid(_squash_btn):
 		return
 
 	var base_text := "Life Saver"
@@ -195,12 +205,17 @@ func _update_button_text() -> void:
 		_btn.text = "{base} (No Git)".format({"base": base_text})
 		_btn.disabled = true
 		_btn.tooltip_text = "Git is not initialized in this project.\nPlease run 'git init' to use Life Saver."
-		# Use default color for disabled state
 		_btn.remove_theme_color_override("font_color")
+		
+		_squash_btn.visible = false
 		return
 
 	_btn.disabled = false
 	var count_text := " x{n}".format({"n": _commit_count}) if _commit_count > 0 else ""
+
+	# Squash button visibility
+	_squash_btn.visible = _commit_count > 0
+	_squash_btn.tooltip_text = "Squash {n} temporary commits".format({"n": _commit_count})
 
 	var es := get_editor_interface().get_editor_settings()
 	var shortcut: String = es.get_setting(SETTING_SHORTCUT)
@@ -258,6 +273,58 @@ func _format_elapsed_time(seconds: int) -> String:
 	if seconds < 86400:
 		return "{h}h".format({"h": seconds / 3600})
 	return "{d}d".format({"d": seconds / 86400})
+
+
+func _on_squash_pressed() -> void:
+	if _commit_count <= 0:
+		return
+
+	# Confirmation (Using a simple toast for now, but in a real app might want a dialog)
+	DLogger.info("Squashing {n} commits...".format({"n": _commit_count}))
+	_git_squash()
+
+
+func _git_squash() -> void:
+	# Find the base commit (the first one NOT starting with d_lifesaver:)
+	var output: Array = []
+	var exit_code := OS.execute("git", ["log", "--format=%s", "HEAD"], output)
+	if exit_code != 0 or output.is_empty():
+		_show_toast("Failed to get git log", true)
+		return
+
+	var lines: PackedStringArray = output[0].split("\n")
+	var squash_count: int = 0
+	for line in lines:
+		if line.begins_with("d_lifesaver:"):
+			squash_count += 1
+		else:
+			break
+
+	if squash_count <= 0:
+		_show_toast("Nothing to squash.")
+		return
+
+	# Reset soft to HEAD~N
+	output.clear()
+	exit_code = OS.execute("git", ["reset", "--soft", "HEAD~" + str(squash_count)], output)
+	if exit_code != 0:
+		_show_toast("git reset failed", true)
+		return
+
+	# Create a new commit
+	# We use a placeholder message, users can rename it later via git commit --amend
+	var time := Time.get_datetime_string_from_system().replace("T", " ")
+	var commit_msg := "Refined: sessions until " + time
+	output.clear()
+	exit_code = OS.execute("git", ["commit", "-m", commit_msg], output)
+
+	if exit_code == 0:
+		DLogger.info("Squashed! " + commit_msg)
+		_show_toast("Squashed {n} commits into one!".format({"n": squash_count}))
+		_commit_count = _get_auto_save_commit_count()
+		_update_button_text()
+	else:
+		_show_toast("git commit failed", true)
 
 
 func _on_btn_pressed() -> void:
