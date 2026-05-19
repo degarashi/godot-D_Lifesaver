@@ -273,7 +273,11 @@ func _update_button_text() -> void:
 		_btn.add_theme_color_override("font_hover_color", Color.MEDIUM_SEA_GREEN.lightened(0.2))
 		_btn.add_theme_color_override("font_pressed_color", Color.MEDIUM_SEA_GREEN.darkened(0.2))
 		_btn.add_theme_color_override("font_focus_color", Color.MEDIUM_SEA_GREEN)
+		_btn.self_modulate = Color.WHITE
 		return
+
+	# Highlight icon when dirty (Subdued Amber)
+	_btn.self_modulate = Color(1.0, 0.75, 0.3)
 
 	if _last_save_unix <= 0:
 		_btn.text = base_text + count_text
