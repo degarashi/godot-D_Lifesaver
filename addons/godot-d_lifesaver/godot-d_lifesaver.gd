@@ -9,6 +9,7 @@ const SETTING_SHORTCUT = "d_lifesaver/shortcut/trigger"
 # ------------- [Private Variable] -------------
 var _btn: Button
 var _squash_btn: Button
+var _undo_btn: Button
 var _commit_dialog: ConfirmationDialog
 var _commit_line_edit: LineEdit
 var _current_toast: PanelContainer
@@ -36,6 +37,9 @@ func _exit_tree() -> void:
 	if _squash_btn:
 		remove_control_from_container(CONTAINER_TOOLBAR, _squash_btn)
 		_squash_btn.queue_free()
+	if _undo_btn:
+		remove_control_from_container(CONTAINER_TOOLBAR, _undo_btn)
+		_undo_btn.queue_free()
 	if _commit_dialog:
 		_commit_dialog.queue_free()
 
@@ -176,8 +180,16 @@ func _prepare_toolbar() -> void:
 	_squash_btn.tooltip_text = "Squash all temporary commits into one"
 	_squash_btn.pressed.connect(_on_squash_pressed)
 
+	_undo_btn = Button.new()
+	_undo_btn.icon = get_editor_interface().get_base_control().get_theme_icon(
+		&"Back", &"EditorIcons"
+	)
+	_undo_btn.tooltip_text = "Undo last life-save commit"
+	_undo_btn.pressed.connect(_on_undo_pressed)
+
 	add_control_to_container(CONTAINER_TOOLBAR, _btn)
 	add_control_to_container(CONTAINER_TOOLBAR, _squash_btn)
+	add_control_to_container(CONTAINER_TOOLBAR, _undo_btn)
 
 	_is_git_repo = _check_is_git_repo()
 	if _is_git_repo:
@@ -255,7 +267,11 @@ func _check_is_dirty() -> bool:
 
 
 func _update_button_text() -> void:
-	if not is_instance_valid(_btn) or not is_instance_valid(_squash_btn):
+	if (
+		not is_instance_valid(_btn)
+		or not is_instance_valid(_squash_btn)
+		or not is_instance_valid(_undo_btn)
+	):
 		return
 
 	var base_text := "Life Saver"
@@ -267,14 +283,18 @@ func _update_button_text() -> void:
 		_btn.remove_theme_color_override("font_color")
 
 		_squash_btn.visible = false
+		_undo_btn.visible = false
 		return
 
 	_btn.disabled = false
 	var count_text := " x{n}".format({"n": _commit_count}) if _commit_count > 0 else ""
 
-	# Squash button visibility
-	_squash_btn.visible = _commit_count > 0
+	# Squash & Undo button visibility
+	var has_temp_commits := _commit_count > 0
+	_squash_btn.visible = has_temp_commits
 	_squash_btn.tooltip_text = "Squash {n} temporary commits".format({"n": _commit_count})
+
+	_undo_btn.visible = has_temp_commits
 
 	var es := get_editor_interface().get_editor_settings()
 	var shortcut_val: Variant = es.get_setting(SETTING_SHORTCUT)
@@ -339,6 +359,35 @@ func _format_elapsed_time(seconds: int) -> String:
 	if seconds < 86400:
 		return "{h}h".format({"h": seconds / 3600})
 	return "{d}d".format({"d": seconds / 86400})
+
+
+func _on_undo_pressed() -> void:
+	_git_undo()
+
+
+func _git_undo() -> void:
+	# Check if the last commit is a life-save commit
+	var output: Array = []
+	var exit_code := OS.execute("git", ["log", "-1", "--format=%s"], output)
+	if exit_code != 0 or output.is_empty():
+		_show_toast("Failed to check last commit", true)
+		return
+
+	var last_msg: String = output[0].strip_edges()
+	if not last_msg.begins_with("d_lifesaver:"):
+		_show_toast("Last commit is not a life-save commit!", true)
+		return
+
+	# Revert (reset soft)
+	output.clear()
+	exit_code = OS.execute("git", ["reset", "--soft", "HEAD~1"], output)
+
+	if exit_code == 0:
+		DLogger.info("Undo successful. Changes are kept in staging.")
+		_show_toast("Undo successful!\nLast save removed.")
+		_on_git_initialized()
+	else:
+		_show_toast("git reset failed", true)
 
 
 func _on_squash_pressed() -> void:
