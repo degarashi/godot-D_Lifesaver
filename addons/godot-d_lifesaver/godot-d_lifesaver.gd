@@ -9,6 +9,8 @@ const SETTING_SHORTCUT = "d_lifesaver/shortcut/trigger"
 # ------------- [Private Variable] -------------
 var _btn: Button
 var _squash_btn: Button
+var _commit_dialog: ConfirmationDialog
+var _commit_line_edit: LineEdit
 var _current_toast: PanelContainer
 var _last_save_unix: int = 0
 var _update_timer: float = 0.0
@@ -23,6 +25,7 @@ var _is_git_repo: bool = false
 # ------------- [Callbacks] -------------
 func _enter_tree() -> void:
 	_prepare_preferences()
+	_prepare_commit_dialog()
 	_prepare_toolbar()
 
 
@@ -33,6 +36,8 @@ func _exit_tree() -> void:
 	if _squash_btn:
 		remove_control_from_container(CONTAINER_TOOLBAR, _squash_btn)
 		_squash_btn.queue_free()
+	if _commit_dialog:
+		_commit_dialog.queue_free()
 
 
 func _input(event: InputEvent) -> void:
@@ -125,9 +130,40 @@ func _prepare_preferences() -> void:
 	)
 
 
+func _prepare_commit_dialog() -> void:
+	_commit_dialog = ConfirmationDialog.new()
+	_commit_dialog.title = "Life Saver: Commit Message"
+	_commit_dialog.confirmed.connect(_on_commit_dialog_confirmed)
+	
+	var vbox := VBoxContainer.new()
+	_commit_dialog.add_child(vbox)
+	
+	var label := Label.new()
+	label.text = "Optional: Enter a memo for this save (prefix 'd_lifesaver:' will be added)"
+	vbox.add_child(label)
+	
+	_commit_line_edit = LineEdit.new()
+	_commit_line_edit.placeholder_text = "auto-save (default)"
+	_commit_line_edit.custom_minimum_size.x = 400
+	vbox.add_child(_commit_line_edit)
+	
+	_commit_dialog.register_text_enter(_commit_line_edit)
+	
+	get_editor_interface().get_base_control().add_child(_commit_dialog)
+
+
+func _on_commit_dialog_confirmed() -> void:
+	var msg: String = _commit_line_edit.text.strip_edges()
+	_commit_line_edit.text = "" # Clear for next time
+	_git_save(msg)
+
+
 func _prepare_toolbar() -> void:
 	_btn = Button.new()
 	_btn.icon = get_editor_interface().get_base_control().get_theme_icon(&"Save", &"EditorIcons")
+	# Allow both left and right clicks
+	_btn.button_mask = MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT
+	_btn.gui_input.connect(_on_btn_gui_input)
 	_btn.pressed.connect(_on_btn_pressed)
 
 	_squash_btn = Button.new()
@@ -218,11 +254,12 @@ func _update_button_text() -> void:
 	_squash_btn.tooltip_text = "Squash {n} temporary commits".format({"n": _commit_count})
 
 	var es := get_editor_interface().get_editor_settings()
-	var shortcut: String = es.get_setting(SETTING_SHORTCUT)
+	var shortcut_val: Variant = es.get_setting(SETTING_SHORTCUT)
+	var shortcut_str: String = str(shortcut_val) if shortcut_val != null else "None"
 
 	_btn.tooltip_text = (
-		"Branch: {branch}\nShortcut: {shortcut}\nStage all changes and create a temporary commit"
-		. format({"branch": _current_branch, "shortcut": shortcut})
+		"L-Click: Quick Save\nR-Click: Memo & Save\nShortcut: %s\nBranch: %s"
+		% [shortcut_str, _current_branch]
 	)
 
 	if not _is_dirty:
@@ -327,17 +364,27 @@ func _git_squash() -> void:
 		_show_toast("git commit failed", true)
 
 
+func _on_btn_gui_input(event: InputEvent) -> void:
+	if not _is_git_repo:
+		return
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_btn.accept_event()
+		_commit_line_edit.text = ""
+		_commit_dialog.popup_centered()
+		_commit_line_edit.grab_focus()
+
+
 func _on_btn_pressed() -> void:
 	if not _is_git_repo:
 		_show_toast("Git is not initialized!", true)
 		return
 
-	DLogger.info("Saving your life...")
-	_show_toast("Saving your life...")
+	# This is triggered by Left-Click (default Button behavior) or Shortcut
 	_git_save()
 
 
-func _git_save() -> void:
+func _git_save(custom_msg: String = "") -> void:
 	var output: Array = []
 
 	# Stage all changes
@@ -360,7 +407,12 @@ func _git_save() -> void:
 
 	# Commit
 	var time := Time.get_datetime_string_from_system().replace("T", " ")
-	var commit_msg := "d_lifesaver: auto-save " + time
+	var commit_msg: String
+	if custom_msg.is_empty():
+		commit_msg = "d_lifesaver: auto-save " + time
+	else:
+		commit_msg = "d_lifesaver: " + custom_msg + " (" + time + ")"
+
 	output.clear()
 	exit_code = OS.execute("git", ["commit", "-m", commit_msg], output)
 
