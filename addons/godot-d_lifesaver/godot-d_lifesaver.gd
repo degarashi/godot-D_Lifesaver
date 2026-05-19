@@ -22,7 +22,7 @@ var _update_timer: float = 0.0
 var _count_timer: float = 0.0
 var _git_check_timer: float = 0.0
 
-var _is_dirty: bool = false
+var _dirty_count: int = 0
 var _commit_count: int = 0
 var _current_branch: String = "unknown"
 var _is_git_repo: bool = false
@@ -56,7 +56,7 @@ func _notification(what: int) -> void:
 			es.has_setting(SETTING_AUTO_SAVE_ON_FOCUS_LOSS)
 			and es.get_setting(SETTING_AUTO_SAVE_ON_FOCUS_LOSS)
 		):
-			if _is_git_repo and _is_dirty:
+			if _is_git_repo and _dirty_count > 0:
 				DLogger.info("Auto-saving on focus loss...")
 				_trigger_git_save()
 
@@ -102,7 +102,7 @@ func _process(delta: float) -> void:
 	# Update status periodically
 	if _update_timer >= dirty_interval:
 		_update_timer = 0.0
-		_is_dirty = DLifesaverGit.is_dirty()
+		_dirty_count = DLifesaverGit.get_dirty_file_count()
 		_current_branch = DLifesaverGit.get_current_branch()
 		_update_ui()
 
@@ -217,7 +217,7 @@ func _prepare_toolbar() -> void:
 
 func _on_git_initialized() -> void:
 	_last_save_unix = DLifesaverGit.get_last_commit_unix_time()
-	_is_dirty = DLifesaverGit.is_dirty()
+	_dirty_count = DLifesaverGit.get_dirty_file_count()
 	_current_branch = DLifesaverGit.get_current_branch()
 	_commit_count = DLifesaverGit.get_auto_save_commit_count()
 	_update_ui()
@@ -265,22 +265,24 @@ func _update_ui() -> void:
 	)
 
 	# Handle status text and colors
-	if not _is_dirty:
+	if _dirty_count <= 0:
 		_btn.text = "%s%s (Safe%s)" % [branch_prefix, base_text, count_text]
 		_btn.add_theme_color_override("font_color", Color.MEDIUM_SEA_GREEN)
 		_btn.self_modulate = Color.WHITE
 		return
 
 	_btn.self_modulate = Color(1.0, 0.75, 0.3)  # Subdued Amber
+	var dirty_text := "%d file%s" % [_dirty_count, "s" if _dirty_count > 1 else ""]
 
 	if _last_save_unix <= 0:
-		_btn.text = branch_prefix + base_text + count_text
+		_btn.text = "%s%s (%s%s)" % [branch_prefix, base_text, dirty_text, count_text]
 		_btn.remove_theme_color_override("font_color")
 		return
 
 	var elapsed := int(Time.get_unix_time_from_system()) - _last_save_unix
 	_btn.text = (
-		"%s%s (%s%s)" % [branch_prefix, base_text, _format_elapsed_time(elapsed), count_text]
+		"%s%s (%s, %s%s)"
+		% [branch_prefix, base_text, dirty_text, _format_elapsed_time(elapsed), count_text]
 	)
 
 	# Turn red if more than 10 minutes have passed

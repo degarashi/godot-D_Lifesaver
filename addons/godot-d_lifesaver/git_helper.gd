@@ -52,6 +52,22 @@ static func is_dirty() -> bool:
 	return false
 
 
+## Get the number of changed (dirty) files.
+static func get_dirty_file_count() -> int:
+	var output: Array = []
+	var exit_code := OS.execute("git", ["status", "--porcelain"], output)
+	if exit_code != 0 or output.is_empty():
+		return 0
+
+	var out_str: String = output[0]
+	var lines: PackedStringArray = out_str.strip_edges().split("\n")
+	var count: int = 0
+	for line in lines:
+		if not line.strip_edges().is_empty():
+			count += 1
+	return count
+
+
 ## Get the history of recent save messages.
 static func get_recent_save_messages(count: int) -> PackedStringArray:
 	var output: Array = []
@@ -61,7 +77,8 @@ static func get_recent_save_messages(count: int) -> PackedStringArray:
 	if exit_code != 0 or output.is_empty():
 		return []
 
-	var lines: PackedStringArray = output[0].strip_edges().split("\n")
+	var out_str: String = output[0]
+	var lines: PackedStringArray = out_str.strip_edges().split("\n")
 	var result: PackedStringArray = []
 	for line in lines:
 		if line.is_empty():
@@ -130,7 +147,8 @@ static func squash() -> Dictionary:
 	if exit_code != 0 or output.is_empty():
 		return {"success": false, "error": "Failed to get git log"}
 
-	var lines: PackedStringArray = output[0].split("\n")
+	var out_str: String = output[0]
+	var lines: PackedStringArray = out_str.split("\n")
 	var squash_count: int = 0
 	for line in lines:
 		if line.begins_with(PREFIX):
